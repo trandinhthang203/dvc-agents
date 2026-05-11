@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import React, { useState, FormEvent } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -9,15 +9,42 @@ import {
     ArrowRight
 } from 'lucide-react';
 import AuthLayout from '../components/AuthLayout';
+import { authService } from '../services/api';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 export function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
 
-    const handleLogin = (e: FormEvent) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [formData, setFormData] = useState({
+        citizenid: '',
+        password: ''
+    });
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { id, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [id === 'login-cccd' ? 'citizenid' : 'password']: value
+        }));
+    };
+
+    const handleLogin = async (e: FormEvent) => {
         e.preventDefault();
-        // Simulate login
-        navigate('/chat');
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            await authService.login(formData);
+            navigate('/chat');
+        } catch (err: any) {
+            console.error('Login error:', err);
+            setError(err.response?.data?.detail || 'Số CCCD hoặc mật khẩu không chính xác.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -73,6 +100,17 @@ export function Login() {
                 </div>
 
                 <form className="space-y-4" onSubmit={handleLogin}>
+                    {error && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500 text-sm font-medium"
+                        >
+                            <AlertCircle size={18} />
+                            {error}
+                        </motion.div>
+                    )}
+
                     <div className="space-y-1.5">
                         <label className="block text-sm font-semibold text-on-surface-variant ml-1" htmlFor="login-cccd">Số CCCD</label>
                         <div className="relative group">
@@ -83,8 +121,11 @@ export function Login() {
                                 id="login-cccd"
                                 type="text"
                                 placeholder="Nhập 12 số CCCD"
-                                className="w-full pl-12 pr-4 py-3 bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all font-sans outline-none"
+                                value={formData.citizenid}
+                                onChange={handleChange}
+                                className="w-full pl-12 pr-4 py-3 bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all font-sans outline-none disabled:opacity-50"
                                 required
+                                disabled={isLoading}
                             />
                         </div>
                     </div>
@@ -102,13 +143,17 @@ export function Login() {
                                 id="login-password"
                                 type={showPassword ? "text" : "password"}
                                 placeholder="••••••••"
-                                className="w-full pl-12 pr-12 py-3 bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all font-sans outline-none"
+                                value={formData.password}
+                                onChange={handleChange}
+                                className="w-full pl-12 pr-12 py-3 bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all font-sans outline-none disabled:opacity-50"
                                 required
+                                disabled={isLoading}
                             />
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
                                 className="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors"
+                                disabled={isLoading}
                             >
                                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                             </button>
@@ -118,10 +163,17 @@ export function Login() {
                     <div className="pt-2 space-y-4">
                         <button
                             type="submit"
-                            className="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-white rounded-xl font-headline font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group"
+                            disabled={isLoading}
+                            className="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-white rounded-xl font-headline font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group disabled:opacity-80"
                         >
-                            Đăng nhập
-                            <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                            {isLoading ? (
+                                <Loader2 size={24} className="animate-spin" />
+                            ) : (
+                                <>
+                                    Đăng nhập
+                                    <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                                </>
+                            )}
                         </button>
 
                         <div className="flex items-center gap-4 py-1">
