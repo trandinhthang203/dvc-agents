@@ -37,7 +37,8 @@ export function Login() {
         setError(null);
 
         try {
-            await authService.login(formData);
+            const data = await authService.login(formData);
+            localStorage.setItem('access_token', data.access_token);
             navigate('/chat');
         } catch (err: any) {
             console.error('Login error:', err);

@@ -4,14 +4,15 @@ import { motion } from 'motion/react';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  disabled?: boolean;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled = false }) => {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = () => {
-    if (message.trim()) {
+    if (message.trim() && !disabled) {
       onSend(message);
       setMessage('');
     }
@@ -61,16 +62,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Nhập yêu cầu điều phối tại đây..."
-            className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-3 px-3 resize-none max-h-48 placeholder:text-outline/40 transition-[height] selection:bg-primary/10"
+            disabled={disabled}
+            placeholder={disabled ? 'Đang xử lý...' : 'Nhập yêu cầu điều phối tại đây...'}
+            className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-3 px-3 resize-none max-h-48 placeholder:text-outline/40 transition-[height] selection:bg-primary/10 disabled:opacity-50 disabled:cursor-wait"
           />
           <button
             onClick={handleSend}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-lg shrink-0 active:scale-95 ${message.trim()
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-lg shrink-0 active:scale-95 ${message.trim() && !disabled
                 ? 'bg-primary text-on-primary hover:bg-primary-hover shadow-primary/20 cursor-pointer'
                 : 'bg-surface-container-high text-outline opacity-50 cursor-not-allowed'
               }`}
-            disabled={!message.trim()}
+            disabled={!message.trim() || disabled}
           >
             <Send size={18} />
           </button>
