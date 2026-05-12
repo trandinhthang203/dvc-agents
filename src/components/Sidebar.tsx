@@ -1,24 +1,57 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   PlusCircle,
   Settings,
   Search,
   MessageSquare,
-  Clock
+  Clock,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { sessionService, ChatSession } from '../services/api';
 
 interface SidebarProps {
-  activeTab: string;
+  sessions: ChatSession[];
+  isLoading: boolean;
+  activeSessionId: string | null;
+  onSelectSession: (id: string) => void;
+  onNewSession: () => void;
+  onDeleteSession: (e: React.MouseEvent, id: string) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab }) => {
-  const chatHistory = [
-    { id: '1', title: 'Điều phối xe cứu hỏa SVĐ', time: '10 phút trước' },
-    { id: '2', title: 'Lập kế hoạch an ninh Quận 1', time: '2 giờ trước' },
-    { id: '3', title: 'Phân bổ nhân sự trực Tết', time: 'Hôm qua' },
-    { id: '4', title: 'Kiểm tra pccc chung cư Landmark', time: '2 ngày trước' },
-  ];
+export const Sidebar: React.FC<SidebarProps> = ({ 
+  sessions, 
+  isLoading, 
+  activeSessionId, 
+  onSelectSession, 
+  onNewSession,
+  onDeleteSession
+}) => {
+  const formatSessionTime = (dateStr?: string) => {
+    if (!dateStr) return 'Vừa xong';
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      
+      // If it's today, show only time
+      if (date.toDateString() === now.toDateString()) {
+        return date.toLocaleTimeString('vi-VN', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+      }
+      
+      // Otherwise show date
+      return date.toLocaleDateString('vi-VN', { 
+        day: '2-digit', 
+        month: '2-digit',
+        year: '2-digit'
+      });
+    } catch (e) {
+      return 'Vừa xong';
+    }
+  };
 
   return (
     <aside className="w-64 h-screen bg-surface-container-low flex flex-col border-r border-outline-variant/10 font-headline">
@@ -40,7 +73,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab }) => {
         </div>
 
         {/* Action Button */}
-        <button className="w-full py-3 px-4 bg-primary text-on-primary rounded-xl flex items-center justify-center gap-2 font-bold hover:bg-primary-hover transition-all shadow-md shadow-primary/10 active:scale-95">
+        <button 
+          onClick={onNewSession}
+          className="w-full py-3 px-4 bg-primary text-on-primary rounded-xl flex items-center justify-center gap-2 font-bold hover:bg-primary-hover transition-all shadow-md shadow-primary/10 active:scale-95"
+        >
           <PlusCircle size={18} />
           Trò chuyện mới
         </button>
@@ -59,29 +95,52 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab }) => {
       {/* Chat History List */}
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-4">
         <div className="px-3 py-2 text-[10px] font-bold text-outline uppercase tracking-widest mb-2 opacity-60">Lịch sử trò chuyện</div>
-        <div className="space-y-1">
-          {chatHistory.map((chat) => (
-            <button
-              key={chat.id}
-              className={`w-full flex flex-col items-start gap-1 p-3 rounded-xl transition-all duration-200 group relative ${chat.id === '1'
-                ? 'bg-surface-container-high border-outline-variant/10 shadow-sm'
-                : 'hover:bg-surface-container-high/60'
-                }`}
-            >
-              <div className="flex items-center gap-2 w-full">
-                <MessageSquare size={14} className={chat.id === '1' ? 'text-primary' : 'text-outline'} />
-                <span className={`text-xs truncate font-medium flex-1 text-left ${chat.id === '1' ? 'text-primary' : 'text-on-surface/80'}`}>
-                  {chat.title}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 opacity-50 px-5">
-                <Clock size={10} />
-                <span className="text-[9px]">{chat.time}</span>
-              </div>
-              {chat.id === '1' && <div className="absolute left-0 top-3 bottom-3 w-1 bg-primary rounded-full" />}
-            </button>
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex justify-center items-center p-4">
+            <Loader2 size={20} className="animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {sessions.map((chat) => {
+              const chatId = chat.idchatsession;
+              if (!chatId) return null;
+
+              const isActive = chatId === activeSessionId;
+              const displayTitle = chat.first_message || chat.title || chat.name || chat.content || `Cuộc trò chuyện ${chatId.slice(0, 8)}`;
+
+              return (
+                <button
+                  key={chatId}
+                  onClick={() => onSelectSession(chatId)}
+                  className={`w-full flex flex-col items-start gap-1 p-3 rounded-xl transition-all duration-200 group relative ${isActive
+                    ? 'bg-surface-container-high border-outline-variant/10 shadow-sm'
+                    : 'hover:bg-surface-container-high/60'
+                    }`}
+                >
+                  <div className="flex items-center gap-2 w-full pr-6">
+                    <MessageSquare size={14} className={isActive ? 'text-primary' : 'text-outline'} />
+                    <span className={`text-xs truncate font-medium flex-1 text-left ${isActive ? 'text-primary' : 'text-on-surface/80'}`}>
+                      {displayTitle}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-50 px-5">
+                    <Clock size={10} />
+                    <span className="text-[9px]">{formatSessionTime(chat.createddate)}</span>
+                  </div>
+                  {isActive && <div className="absolute left-0 top-3 bottom-3 w-1 bg-primary rounded-full" />}
+                  
+                  {/* Delete Button */}
+                  <div 
+                    onClick={(e) => onDeleteSession(e, chatId)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-outline hover:text-red-500 rounded-lg transition-all"
+                  >
+                    <Trash2 size={14} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="p-4 space-y-4">

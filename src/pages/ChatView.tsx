@@ -10,7 +10,10 @@ import { Suggestions } from '../components/Suggestions';
 import { ChatInput } from '../components/ChatInput';
 import { VerticalAgentStepper, AgentStep } from '../components/VerticalAgentStepper';
 import { User, Sparkles, AlertTriangle } from 'lucide-react';
-import { chatService, SSEEvent } from '../services/api';
+import { ChatMessageCreate, chatService, SSEEvent, sessionService, ChatSession } from '../services/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { useParams, useNavigate } from 'react-router-dom';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,14 +27,129 @@ interface ChatMessage {
     error?: string;
 }
 
-// TODO: replace with the session ID returned by your session-creation API
-const CHAT_SESSION_ID = '0fdf18ce-bc8a-46c4-b99b-a729df22e0c4';
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const ChatView: React.FC = () => {
+    const { sessionId } = useParams<{ sessionId: string }>();
+    const navigate = useNavigate();
+
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
+    const [activeTab, setActiveTab] = useState<'chat' | 'document' | 'map'>('chat');
+    const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+    const [currentSessionId, setCurrentSessionId] = useState<string | null>(sessionId || null);
+
+    const handleLinkClick = (url: string) => {
+        setDocumentUrl(url);
+        setActiveTab('document');
+    };
+
+    const [sessions, setSessions] = useState<ChatSession[]>([]);
+    const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+
+    const fetchSessions = async (silent = false) => {
+        if (!silent) setIsLoadingSessions(true);
+        try {
+            const data = await sessionService.getSessions();
+            const sessionsList = data || [];
+            setSessions(sessionsList);
+
+            // Background enrichment: fetch first message for recent sessions
+            // to display in the sidebar title
+            (async () => {
+                const enriched = await Promise.all(
+                    sessionsList.slice(0, 15).map(async (s) => {
+                        try {
+                            const history = await sessionService.getSessionDetails(s.idchatsession);
+                            if (history && history.length > 0) {
+                                return { ...s, first_message: history[0].msgcontent };
+                            }
+                        } catch (e) {
+                            // skip if failed
+                        }
+                        return s;
+                    })
+                );
+
+                setSessions(prev => prev.map(s => {
+                    const found = enriched.find(e => e.idchatsession === s.idchatsession);
+                    return found || s;
+                }));
+            })();
+        } catch (err) {
+            console.error('Failed to fetch sessions:', err);
+        } finally {
+            if (!silent) setIsLoadingSessions(false);
+        }
+    };
+
+    const handleNewSession = async () => {
+        // If current session is already empty, don't create another one
+        if (messages.length === 0 && currentSessionId) return;
+
+        setMessages([]); // Clear messages for new session
+        setCurrentSessionId(null); 
+        try {
+            const session = await sessionService.createSession();
+            const sid = session.idchatsession || session.id || session.session_id;
+            if (sid) {
+                navigate(`/chat/${sid}`);
+            }
+        } catch (err) {
+            console.error('Failed to create session:', err);
+        }
+    };
+
+    const handleSelectSession = async (id: string) => {
+        navigate(`/chat/${id}`);
+    };
+
+    const loadSessionMessages = async (id: string) => {
+        setMessages([]); // Clear current messages while loading
+        try {
+            const history = await sessionService.getSessionDetails(id);
+            const mappedMessages: ChatMessage[] = history.map(msg => ({
+                id: msg.idchatmessage || Math.random().toString(),
+                role: msg.isfromuser ? 'user' : 'assistant',
+                content: msg.msgcontent || '',
+                steps: [], // Past steps are usually not re-rendered as active steps
+                streaming: false
+            }));
+            setMessages(mappedMessages);
+        } catch (err) {
+            console.error('Failed to fetch session details:', err);
+        }
+    };
+
+    // Watch URL sessionId changes
+    useEffect(() => {
+        if (sessionId) {
+            setCurrentSessionId(sessionId);
+            loadSessionMessages(sessionId);
+            setActiveTab('chat');
+        } else {
+            // If no sessionId in URL, either load the latest or create new
+            handleNewSession();
+        }
+    }, [sessionId]);
+
+    const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        try {
+            await sessionService.deleteSession(id);
+            setSessions(prev => prev.filter(s => s.idchatsession !== id));
+            if (currentSessionId === id) {
+                navigate('/chat');
+            }
+        } catch (err) {
+            console.error('Failed to delete session:', err);
+        }
+    };
+
+    // Initial load
+    useEffect(() => {
+        fetchSessions();
+    }, []);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const abortRef = useRef<AbortController | null>(null);
@@ -71,9 +189,14 @@ export const ChatView: React.FC = () => {
         setMessages(prev => [...prev, userMsg, assistantMsg]);
         setIsStreaming(true);
 
+        if (!currentSessionId) {
+            console.error("No active session!");
+            return;
+        }
+
         const controller = chatService.streamMessage(
             {
-                idchatsession: CHAT_SESSION_ID,
+                idchatsession: currentSessionId,
                 msgcontent: content,
                 isfromuser: true,
             },
@@ -130,6 +253,7 @@ export const ChatView: React.FC = () => {
                                 ...s,
                                 status: 'completed' as const,
                             }));
+                            fetchSessions(true); // Silent refresh to update sidebar title/time
                             return { ...msg, streaming: false, steps: completedSteps };
                         }
 
@@ -162,14 +286,21 @@ export const ChatView: React.FC = () => {
 
     return (
         <div className="flex h-screen w-full bg-surface overflow-hidden">
-            <Sidebar activeTab="new-chat" />
+            <Sidebar 
+                sessions={sessions}
+                isLoading={isLoadingSessions}
+                activeSessionId={currentSessionId} 
+                onSelectSession={handleSelectSession} 
+                onNewSession={handleNewSession} 
+                onDeleteSession={handleDeleteSession}
+            />
 
             <main className="flex-1 flex flex-col relative overflow-hidden bg-surface">
-                <Header />
+                <Header activeTab={activeTab} onTabChange={setActiveTab} />
 
                 <div className="flex-1 flex overflow-hidden relative">
                     {/* Chat column */}
-                    <div className="flex-1 flex flex-col relative min-w-0">
+                    <div className={`flex-1 flex-col relative min-w-0 ${activeTab === 'chat' ? 'flex' : 'hidden'}`}>
                         {/* Scrollable message list */}
                         <div
                             ref={scrollRef}
@@ -221,22 +352,52 @@ export const ChatView: React.FC = () => {
                                             {/* Agent stepper – only shown when there are steps */}
                                             {msg.steps && msg.steps.length > 0 && (
                                                 <div className="mb-6 max-w-3xl">
-                                                    <VerticalAgentStepper steps={msg.steps} />
+                                                    <VerticalAgentStepper steps={msg.steps} onLinkClick={handleLinkClick} />
                                                 </div>
                                             )}
 
                                             {/* Message body */}
-                                            <p
+                                            <div
                                                 className={`leading-relaxed text-sm ${
                                                     msg.role === 'assistant' ? 'font-medium' : ''
                                                 }`}
                                             >
-                                                {msg.content}
+                                                <ReactMarkdown
+                                                    remarkPlugins={[remarkGfm]}
+                                                    components={{
+                                                        a: ({ node, href, ...props }) => (
+                                                            <a 
+                                                                {...props} 
+                                                                href={href}
+                                                                onClick={(e) => {
+                                                                    if (href) {
+                                                                        e.preventDefault();
+                                                                        handleLinkClick(href);
+                                                                    }
+                                                                }}
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer" 
+                                                                className="text-primary hover:underline font-medium cursor-pointer" 
+                                                            />
+                                                        ),
+                                                        p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                                                        ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2" {...props} />,
+                                                        ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2" {...props} />,
+                                                        li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+                                                        code: ({ node, inline, className, children, ...props }: any) => (
+                                                            inline 
+                                                                ? <code className="bg-surface-container-high px-1.5 py-0.5 rounded text-[13px] font-mono text-on-surface" {...props}>{children}</code>
+                                                                : <code className="block bg-surface-container-high p-3 rounded-xl text-[13px] font-mono text-on-surface overflow-x-auto mb-2" {...props}>{children}</code>
+                                                        )
+                                                    }}
+                                                >
+                                                    {msg.content}
+                                                </ReactMarkdown>
                                                 {/* Blinking cursor while streaming */}
                                                 {msg.streaming && (
-                                                    <span className="inline-block w-0.5 h-4 bg-primary ml-0.5 align-middle animate-pulse" />
+                                                    <span className="inline-block w-1.5 h-4 bg-primary ml-1 align-middle animate-pulse" />
                                                 )}
-                                            </p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -249,7 +410,31 @@ export const ChatView: React.FC = () => {
                         </div>
                     </div>
 
-                    <Suggestions />
+                    <div className={`${activeTab === 'chat' ? 'block shrink-0' : 'hidden'}`}>
+                        <Suggestions />
+                    </div>
+
+                    {/* Document View */}
+                    <div className={`flex-1 flex-col w-full h-full p-4 bg-surface-container-lowest ${activeTab === 'document' ? 'flex' : 'hidden'}`}>
+                        {documentUrl ? (
+                            <iframe 
+                                src={documentUrl} 
+                                className="w-full h-full border-0 rounded-2xl shadow-sm"
+                                title="Tài liệu"
+                            />
+                        ) : (
+                            <div className="flex-1 flex items-center justify-center text-secondary opacity-50">
+                                <p>Chưa có tài liệu nào được chọn</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Map View */}
+                    <div className={`flex-1 flex-col w-full h-full p-4 bg-surface-container-lowest ${activeTab === 'map' ? 'flex' : 'hidden'}`}>
+                        <div className="flex-1 flex items-center justify-center text-secondary opacity-50">
+                            <p>Tính năng Bản đồ đang được phát triển</p>
+                        </div>
+                    </div>
                 </div>
             </main>
         </div>

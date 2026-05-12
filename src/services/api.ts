@@ -163,4 +163,44 @@ export const chatService = {
   },
 };
 
+// ─── Session service ──────────────────────────────────────────────────────────
+export interface ChatSession {
+  idchatsession: string;
+  iduser?: number;
+  status?: string;
+  endeddate?: string | null;
+  createddate: string;
+  title?: string;
+  first_message?: string;
+  [key: string]: any;
+}
+
+export interface BackendChatMessage {
+  idchatmessage?: string;
+  idchatsession?: string;
+  msgcontent?: string;
+  isfromuser?: boolean;
+  sentat?: string;
+  [key: string]: any;
+}
+
+export const sessionService = {
+  createSession: async (): Promise<ChatSession> => {
+    const response = await api.post('chat/new');
+    return response.data;
+  },
+  getSessions: async (): Promise<ChatSession[]> => {
+    const response = await api.get('chat');
+    return response.data;
+  },
+  deleteSession: async (sessionId: string): Promise<any> => {
+    const response = await api.delete(`chat/${sessionId}`);
+    return response.data;
+  },
+  getSessionDetails: async (sessionId: string): Promise<BackendChatMessage[]> => {
+    const response = await api.get(`chat/${sessionId}`);
+    return response.data;
+  },
+};
+
 export default api;

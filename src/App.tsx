@@ -10,7 +10,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/chat" element={<ChatView />} />
+        <Route path="/chat/:sessionId?" element={<ChatView />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>

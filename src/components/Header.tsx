@@ -1,15 +1,35 @@
 import React from 'react';
 import { Search, Bell, HelpCircle } from 'lucide-react';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  activeTab: 'chat' | 'document' | 'map';
+  onTabChange: (tab: 'chat' | 'document' | 'map') => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
   return (
     <header className="h-16 px-8 flex justify-between items-center bg-surface/80 backdrop-blur-xl border-b border-outline-variant/10 sticky top-0 z-20">
       <div className="flex items-center gap-8">
         <h2 className="text-primary font-bold text-lg tracking-tight font-headline"></h2>
         <nav className="flex gap-6">
-          <a href="#" className="text-primary font-bold border-b-2 border-primary pb-1 text-sm">Hội thoại</a>
-          <a href="#" className="text-secondary hover:text-primary transition-all text-sm font-medium">Tài liệu</a>
-          <a href="#" className="text-secondary hover:text-primary transition-all text-sm font-medium">Bản đồ</a>
+          <button 
+            onClick={() => onTabChange('chat')}
+            className={`transition-all text-sm ${activeTab === 'chat' ? 'text-primary font-bold border-b-2 border-primary pb-1' : 'text-secondary hover:text-primary font-medium pb-[6px]'}`}
+          >
+            Hội thoại
+          </button>
+          <button 
+            onClick={() => onTabChange('document')}
+            className={`transition-all text-sm ${activeTab === 'document' ? 'text-primary font-bold border-b-2 border-primary pb-1' : 'text-secondary hover:text-primary font-medium pb-[6px]'}`}
+          >
+            Tài liệu
+          </button>
+          <button 
+            onClick={() => onTabChange('map')}
+            className={`transition-all text-sm ${activeTab === 'map' ? 'text-primary font-bold border-b-2 border-primary pb-1' : 'text-secondary hover:text-primary font-medium pb-[6px]'}`}
+          >
+            Bản đồ
+          </button>
         </nav>
       </div>
 

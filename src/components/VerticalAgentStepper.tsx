@@ -1,6 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Check, Loader2, Circle, AlertCircle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export interface AgentStep {
   id: string;
@@ -14,9 +16,10 @@ export interface AgentStep {
 
 interface VerticalAgentStepperProps {
   steps: AgentStep[];
+  onLinkClick?: (url: string) => void;
 }
 
-export const VerticalAgentStepper: React.FC<VerticalAgentStepperProps> = ({ steps }) => {
+export const VerticalAgentStepper: React.FC<VerticalAgentStepperProps> = ({ steps, onLinkClick }) => {
   return (
     <div className="space-y-0 ml-4">
       {steps.map((step, index) => (
@@ -102,8 +105,39 @@ export const VerticalAgentStepper: React.FC<VerticalAgentStepperProps> = ({ step
               </div>
               {step.time && <span className="text-[10px] text-outline font-medium">{step.time}</span>}
             </div>
-            <h4 className="font-bold text-on-surface mb-2 font-headline tracking-tight">{step.title}</h4>
-            <p className="text-xs text-secondary leading-relaxed">{step.content}</p>
+            <div className="text-xs text-secondary leading-relaxed">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ node, href, ...props }) => (
+                    <a 
+                      {...props} 
+                      href={href}
+                      onClick={(e) => {
+                        if (onLinkClick && href) {
+                          e.preventDefault();
+                          onLinkClick(href);
+                        }
+                      }}
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-primary hover:underline font-medium cursor-pointer" 
+                    />
+                  ),
+                  p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                  ul: ({ node, ...props }) => <ul className="list-disc pl-4 mb-2" {...props} />,
+                  ol: ({ node, ...props }) => <ol className="list-decimal pl-4 mb-2" {...props} />,
+                  li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+                  code: ({ node, inline, className, children, ...props }: any) => (
+                    inline 
+                      ? <code className="bg-surface-container-high px-1 py-0.5 rounded text-[11px] font-mono text-on-surface" {...props}>{children}</code>
+                      : <code className="block bg-surface-container-high p-2 rounded-lg text-[11px] font-mono text-on-surface overflow-x-auto mb-2" {...props}>{children}</code>
+                  )
+                }}
+              >
+                {step.content}
+              </ReactMarkdown>
+            </div>
           </motion.div>
         </div>
       ))}
