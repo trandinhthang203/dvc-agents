@@ -62,8 +62,10 @@ export interface ChatMessageCreate {
 
 export type SSEProgressEvent = {
   type: 'progress';
-  node: string;
-  message: string;
+  node?: string;
+  message?: string;
+  /** Present when backend wraps a dynamic_form payload inside a progress event */
+  data?: Record<string, any>;
 };
 
 export type SSEResultEvent = {
@@ -83,7 +85,32 @@ export type SSEErrorEvent = {
   message: string;
 };
 
-export type SSEEvent = SSEProgressEvent | SSEResultEvent | SSEDoneEvent | SSEErrorEvent;
+/** Emitted when the backend wants the UI to render a dynamic form */
+export type SSEDynamicFormEvent = {
+  type: 'dynamic_form';
+  kind: 'dynamic_form';
+  request_id: string;
+  title: string;
+  description?: string;
+  submit_label?: string;
+  pdf_path?: string | null;
+  fields: Array<{
+    field_id: string;
+    label: string;
+    type: string;
+    required: boolean;
+    placeholder?: string;
+    x?: number | null;
+    y?: number | null;
+  }>;
+};
+
+export type SSEEvent =
+  | SSEProgressEvent
+  | SSEResultEvent
+  | SSEDoneEvent
+  | SSEErrorEvent
+  | SSEDynamicFormEvent;
 
 // ─── Chat service ─────────────────────────────────────────────────────────────
 export const chatService = {
@@ -200,6 +227,80 @@ export const sessionService = {
   getSessionDetails: async (sessionId: string): Promise<BackendChatMessage[]> => {
     const response = await api.get(`chat/${sessionId}`);
     return response.data;
+  },
+};
+
+// ─── Dynamic Form service ────────────────────────────────────────────────────
+export interface DynamicFormSubmitRequest {
+  request_id: string;
+  idchatsession: string;
+  values: Record<string, string | boolean>;
+}
+
+export const formService = {
+  /**
+   * Submits a filled dynamic form and streams the assistant reply via SSE.
+   * Mirrors chatService.streamMessage but POSTs to /message/forms/submit.
+   */
+  submitForm(
+    payload: DynamicFormSubmitRequest,
+    onEvent: (event: SSEEvent) => void,
+    onError?: (err: Error) => void,
+  ): AbortController {
+    const controller = new AbortController();
+    const url = '/api/message/forms/submit';
+    const token = localStorage.getItem('access_token');
+
+    (async () => {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok || !response.body) {
+          const errorBody = await response.text().catch(() => '');
+          throw new Error(`HTTP ${response.status}: ${response.statusText} — ${errorBody}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() ?? '';
+
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith('data:')) continue;
+            const jsonStr = line.slice('data:'.length).trim();
+            if (!jsonStr) continue;
+            try {
+              const parsed: SSEEvent = JSON.parse(jsonStr);
+              onEvent(parsed);
+            } catch {
+              // malformed JSON – ignore
+            }
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          onError?.(err as Error);
+        }
+      }
+    })();
+
+    return controller;
   },
 };
 

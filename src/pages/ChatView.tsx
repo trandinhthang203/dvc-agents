@@ -9,8 +9,9 @@ import { Header } from '../components/Header';
 import { Suggestions } from '../components/Suggestions';
 import { ChatInput } from '../components/ChatInput';
 import { VerticalAgentStepper, AgentStep } from '../components/VerticalAgentStepper';
+import { DynamicForm, DynamicFormPayload } from '../components/DynamicForm';
 import { User, Sparkles, AlertTriangle } from 'lucide-react';
-import { ChatMessageCreate, chatService, SSEEvent, sessionService, ChatSession } from '../services/api';
+import { ChatMessageCreate, chatService, SSEEvent, SSEDynamicFormEvent, sessionService, ChatSession, formService, DynamicFormSubmitRequest } from '../services/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -25,6 +26,12 @@ interface ChatMessage {
     /** True while the AI is still writing */
     streaming?: boolean;
     error?: string;
+    /** Set when the backend yields a dynamic_form payload */
+    formPayload?: DynamicFormPayload;
+    /** True while the form submission SSE stream is running */
+    formSubmitting?: boolean;
+    /** True once the form has been accepted by the backend */
+    formSubmitted?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -206,6 +213,20 @@ export const ChatView: React.FC = () => {
                         if (msg.id !== assistantMsgId) return msg;
 
                         if (event.type === 'progress') {
+                            // ── Dynamic form embedded in a progress event ──────────────
+                            if (event.data?.kind === 'dynamic_form') {
+                                const fp = event.data as DynamicFormPayload;
+                                return {
+                                    ...msg,
+                                    streaming: false,
+                                    content: '',
+                                    formPayload: fp,
+                                    formSubmitting: false,
+                                    formSubmitted: false,
+                                };
+                            }
+
+                            // ── Regular stepper step ───────────────────────────────────
                             const existingSteps = msg.steps ?? [];
                             const nodeExists = existingSteps.some(s => s.agentName === event.node);
 
@@ -223,10 +244,10 @@ export const ChatView: React.FC = () => {
 
                             // First time seeing this node → create one step for it
                             const newStep: AgentStep = {
-                                id: event.node,
-                                agentName: event.node,
-                                title: event.node,
-                                content: event.message,
+                                id: event.node ?? 'unknown',
+                                agentName: event.node ?? 'unknown',
+                                title: event.node ?? 'unknown',
+                                content: event.message ?? '',
                                 status: 'processing',
                                 time: new Date().toLocaleTimeString('vi-VN', {
                                     hour: '2-digit',
@@ -246,6 +267,28 @@ export const ChatView: React.FC = () => {
                                     : s
                             );
                             return { ...msg, steps: updatedSteps };
+                        }
+
+                        if (event.type === 'dynamic_form') {
+                            // Backend wants us to replace the streaming message with a form
+                            const formEvt = event as SSEDynamicFormEvent;
+                            const formPayload: DynamicFormPayload = {
+                                kind: 'dynamic_form',
+                                request_id: formEvt.request_id,
+                                title: formEvt.title,
+                                description: formEvt.description,
+                                submit_label: formEvt.submit_label,
+                                pdf_path: formEvt.pdf_path,
+                                fields: formEvt.fields,
+                            };
+                            return {
+                                ...msg,
+                                streaming: false,
+                                content: '',
+                                formPayload,
+                                formSubmitting: false,
+                                formSubmitted: false,
+                            };
                         }
 
                         if (event.type === 'done') {
@@ -276,6 +319,157 @@ export const ChatView: React.FC = () => {
                             ? { ...msg, streaming: false, error: err.message }
                             : msg
                     )
+                );
+                setIsStreaming(false);
+            },
+        );
+
+        abortRef.current = controller;
+    };
+
+    // ─── Dynamic form submission ────────────────────────────────────────────────
+    const handleFormSubmit = (
+        msgId: string,
+        requestId: string,
+        values: Record<string, string | boolean>,
+    ) => {
+        if (!currentSessionId) return;
+
+        // Mark this message's form as submitting
+        setMessages(prev =>
+            prev.map(msg =>
+                msg.id === msgId ? { ...msg, formSubmitting: true } : msg
+            )
+        );
+
+        // Append a new assistant reply that will stream the form result
+        const replyMsgId = (Date.now() + 2).toString();
+        const replyMsg: ChatMessage = {
+            id: replyMsgId,
+            role: 'assistant',
+            content: '',
+            steps: [],
+            streaming: true,
+        };
+        setMessages(prev => [...prev, replyMsg]);
+        setIsStreaming(true);
+
+        abortRef.current?.abort();
+
+        const submitPayload: DynamicFormSubmitRequest = {
+            request_id: requestId,
+            idchatsession: currentSessionId,
+            values,
+        };
+
+        const controller = formService.submitForm(
+            submitPayload,
+            (event: SSEEvent) => {
+                // Mark form as submitted on the first event received
+                setMessages(prev =>
+                    prev.map(msg =>
+                        msg.id === msgId
+                            ? { ...msg, formSubmitting: false, formSubmitted: true }
+                            : msg
+                    )
+                );
+
+                // Route the reply stream events exactly like handleSend
+                setMessages(prev =>
+                    prev.map(msg => {
+                        if (msg.id !== replyMsgId) return msg;
+
+                        if (event.type === 'progress') {
+                            // ── Dynamic form embedded in a progress event ──────────────
+                            if (event.data?.kind === 'dynamic_form') {
+                                const fp = event.data as DynamicFormPayload;
+                                // Mark the original form as submitted, replace reply with new form
+                                setMessages(prev =>
+                                    prev.map(m =>
+                                        m.id === msgId
+                                            ? { ...m, formSubmitting: false, formSubmitted: true }
+                                            : m
+                                    )
+                                );
+                                return {
+                                    ...msg,
+                                    streaming: false,
+                                    content: '',
+                                    formPayload: fp,
+                                    formSubmitting: false,
+                                    formSubmitted: false,
+                                };
+                            }
+
+                            // ── Regular stepper step ───────────────────────────────────
+                            const existingSteps = msg.steps ?? [];
+                            const nodeExists = existingSteps.some(s => s.agentName === event.node);
+                            if (nodeExists) {
+                                return {
+                                    ...msg,
+                                    steps: existingSteps.map(s =>
+                                        s.agentName === event.node
+                                            ? { ...s, status: 'processing' as const, content: event.message }
+                                            : s
+                                    ),
+                                };
+                            }
+                            const newStep: AgentStep = {
+                                id: event.node ?? 'unknown',
+                                agentName: event.node ?? 'unknown',
+                                title: event.node ?? 'unknown',
+                                content: event.message ?? '',
+                                status: 'processing',
+                                time: new Date().toLocaleTimeString('vi-VN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                }),
+                                type: 'execution',
+                            };
+                            return { ...msg, steps: [...existingSteps, newStep] };
+                        }
+
+
+                        if (event.type === 'result') {
+                            const updatedSteps = (msg.steps ?? []).map(s =>
+                                s.agentName === event.node
+                                    ? { ...s, status: 'completed' as const, content: event.message }
+                                    : s
+                            );
+                            return { ...msg, steps: updatedSteps };
+                        }
+
+                        if (event.type === 'done') {
+                            const completedSteps = (msg.steps ?? []).map(s => ({
+                                ...s,
+                                status: 'completed' as const,
+                            }));
+                            fetchSessions(true);
+                            return { ...msg, streaming: false, steps: completedSteps };
+                        }
+
+                        if (event.type === 'error') {
+                            return { ...msg, streaming: false, error: event.message };
+                        }
+
+                        return msg;
+                    })
+                );
+
+                if (event.type === 'done' || event.type === 'error') {
+                    setIsStreaming(false);
+                }
+            },
+            (err) => {
+                setMessages(prev =>
+                    prev.map(msg => {
+                        if (msg.id === msgId)
+                            return { ...msg, formSubmitting: false, formSubmitted: false };
+                        if (msg.id === replyMsgId)
+                            return { ...msg, streaming: false, error: err.message };
+                        return msg;
+                    })
                 );
                 setIsStreaming(false);
             },
@@ -356,7 +550,17 @@ export const ChatView: React.FC = () => {
                                                 </div>
                                             )}
 
-                                            {/* Message body */}
+                                            {/* Dynamic form – rendered instead of text */}
+                                            {msg.formPayload ? (
+                                                <DynamicForm
+                                                    payload={msg.formPayload}
+                                                    onSubmit={(reqId, values) =>
+                                                        handleFormSubmit(msg.id, reqId, values)
+                                                    }
+                                                    submitting={msg.formSubmitting}
+                                                    submitted={msg.formSubmitted}
+                                                />
+                                            ) : (
                                             <div
                                                 className={`leading-relaxed text-sm ${
                                                     msg.role === 'assistant' ? 'font-medium' : ''
@@ -398,6 +602,7 @@ export const ChatView: React.FC = () => {
                                                     <span className="inline-block w-1.5 h-4 bg-primary ml-1 align-middle animate-pulse" />
                                                 )}
                                             </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
