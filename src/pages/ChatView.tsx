@@ -95,7 +95,7 @@ export const ChatView: React.FC = () => {
         if (messages.length === 0 && currentSessionId) return;
 
         setMessages([]); // Clear messages for new session
-        setCurrentSessionId(null); 
+        setCurrentSessionId(null);
         try {
             const session = await sessionService.createSession();
             const sid = session.idchatsession || session.id || session.session_id;
@@ -322,6 +322,26 @@ export const ChatView: React.FC = () => {
                 );
                 setIsStreaming(false);
             },
+            () => {
+                // Ensure streaming flag is cleared and steps completed when connection gracefully closes
+                setMessages(prev =>
+                    prev.map(msg => {
+                        if (msg.id === assistantMsgId) {
+                            return {
+                                ...msg,
+                                streaming: false,
+                                steps: (msg.steps ?? []).map(s => ({
+                                    ...s,
+                                    status: s.status === 'processing' ? 'completed' : s.status,
+                                })),
+                            };
+                        }
+                        return msg;
+                    })
+                );
+                setIsStreaming(false);
+                fetchSessions(true);
+            }
         );
 
         abortRef.current = controller;
@@ -473,6 +493,30 @@ export const ChatView: React.FC = () => {
                 );
                 setIsStreaming(false);
             },
+            () => {
+                // Handle graceful close
+                setMessages(prev =>
+                    prev.map(msg => {
+                        if (msg.id === replyMsgId) {
+                            return {
+                                ...msg,
+                                streaming: false,
+                                steps: (msg.steps ?? []).map(s => ({
+                                    ...s,
+                                    status: s.status === 'processing' ? 'completed' : s.status,
+                                })),
+                            };
+                        }
+                        // If form was submitting and connection closed without error, assume it succeeded
+                        if (msg.id === msgId && msg.formSubmitting) {
+                            return { ...msg, formSubmitting: false, formSubmitted: true };
+                        }
+                        return msg;
+                    })
+                );
+                setIsStreaming(false);
+                fetchSessions(true);
+            }
         );
 
         abortRef.current = controller;
@@ -480,12 +524,12 @@ export const ChatView: React.FC = () => {
 
     return (
         <div className="flex h-screen w-full bg-surface overflow-hidden">
-            <Sidebar 
+            <Sidebar
                 sessions={sessions}
                 isLoading={isLoadingSessions}
-                activeSessionId={currentSessionId} 
-                onSelectSession={handleSelectSession} 
-                onNewSession={handleNewSession} 
+                activeSessionId={currentSessionId}
+                onSelectSession={handleSelectSession}
+                onNewSession={handleNewSession}
                 onDeleteSession={handleDeleteSession}
             />
 
@@ -514,11 +558,10 @@ export const ChatView: React.FC = () => {
                                 <div key={msg.id} className="flex gap-5">
                                     {/* Avatar */}
                                     <div
-                                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-outline-variant/10 ${
-                                            msg.role === 'user'
-                                                ? 'bg-surface-container-high'
-                                                : 'bg-primary shadow-primary/20'
-                                        }`}
+                                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-outline-variant/10 ${msg.role === 'user'
+                                            ? 'bg-surface-container-high'
+                                            : 'bg-primary shadow-primary/20'
+                                            }`}
                                     >
                                         {msg.role === 'user' ? (
                                             <User size={18} className="text-secondary" />
@@ -529,11 +572,10 @@ export const ChatView: React.FC = () => {
 
                                     <div className="flex-1 space-y-8">
                                         <div
-                                            className={`${
-                                                msg.role === 'user'
-                                                    ? 'max-w-2xl bg-surface-container-low p-5'
-                                                    : 'max-w-4xl'
-                                            } rounded-3xl rounded-tl-none`}
+                                            className={`${msg.role === 'user'
+                                                ? 'max-w-2xl bg-surface-container-low p-5'
+                                                : 'max-w-4xl'
+                                                } rounded-3xl rounded-tl-none`}
                                         >
                                             {/* Error banner */}
                                             {msg.error && (
@@ -561,47 +603,46 @@ export const ChatView: React.FC = () => {
                                                     submitted={msg.formSubmitted}
                                                 />
                                             ) : (
-                                            <div
-                                                className={`leading-relaxed text-sm ${
-                                                    msg.role === 'assistant' ? 'font-medium' : ''
-                                                }`}
-                                            >
-                                                <ReactMarkdown
-                                                    remarkPlugins={[remarkGfm]}
-                                                    components={{
-                                                        a: ({ node, href, ...props }) => (
-                                                            <a 
-                                                                {...props} 
-                                                                href={href}
-                                                                onClick={(e) => {
-                                                                    if (href) {
-                                                                        e.preventDefault();
-                                                                        handleLinkClick(href);
-                                                                    }
-                                                                }}
-                                                                target="_blank" 
-                                                                rel="noopener noreferrer" 
-                                                                className="text-primary hover:underline font-medium cursor-pointer" 
-                                                            />
-                                                        ),
-                                                        p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
-                                                        ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2" {...props} />,
-                                                        ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2" {...props} />,
-                                                        li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-                                                        code: ({ node, inline, className, children, ...props }: any) => (
-                                                            inline 
-                                                                ? <code className="bg-surface-container-high px-1.5 py-0.5 rounded text-[13px] font-mono text-on-surface" {...props}>{children}</code>
-                                                                : <code className="block bg-surface-container-high p-3 rounded-xl text-[13px] font-mono text-on-surface overflow-x-auto mb-2" {...props}>{children}</code>
-                                                        )
-                                                    }}
+                                                <div
+                                                    className={`leading-relaxed text-sm ${msg.role === 'assistant' ? 'font-medium' : ''
+                                                        }`}
                                                 >
-                                                    {msg.content}
-                                                </ReactMarkdown>
-                                                {/* Blinking cursor while streaming */}
-                                                {msg.streaming && (
-                                                    <span className="inline-block w-1.5 h-4 bg-primary ml-1 align-middle animate-pulse" />
-                                                )}
-                                            </div>
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkGfm]}
+                                                        components={{
+                                                            a: ({ node, href, ...props }) => (
+                                                                <a
+                                                                    {...props}
+                                                                    href={href}
+                                                                    onClick={(e) => {
+                                                                        if (href) {
+                                                                            e.preventDefault();
+                                                                            handleLinkClick(href);
+                                                                        }
+                                                                    }}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-primary hover:underline font-medium cursor-pointer"
+                                                                />
+                                                            ),
+                                                            p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                                                            ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2" {...props} />,
+                                                            ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2" {...props} />,
+                                                            li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+                                                            code: ({ node, inline, className, children, ...props }: any) => (
+                                                                inline
+                                                                    ? <code className="bg-surface-container-high px-1.5 py-0.5 rounded text-[13px] font-mono text-on-surface" {...props}>{children}</code>
+                                                                    : <code className="block bg-surface-container-high p-3 rounded-xl text-[13px] font-mono text-on-surface overflow-x-auto mb-2" {...props}>{children}</code>
+                                                            )
+                                                        }}
+                                                    >
+                                                        {msg.content}
+                                                    </ReactMarkdown>
+                                                    {/* Blinking cursor while streaming */}
+                                                    {msg.streaming && (
+                                                        <span className="inline-block w-1.5 h-4 bg-primary ml-1 align-middle animate-pulse" />
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -622,8 +663,8 @@ export const ChatView: React.FC = () => {
                     {/* Document View */}
                     <div className={`flex-1 flex-col w-full h-full p-4 bg-surface-container-lowest ${activeTab === 'document' ? 'flex' : 'hidden'}`}>
                         {documentUrl ? (
-                            <iframe 
-                                src={documentUrl} 
+                            <iframe
+                                src={documentUrl}
                                 className="w-full h-full border-0 rounded-2xl shadow-sm"
                                 title="Tài liệu"
                             />

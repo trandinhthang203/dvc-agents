@@ -70,9 +70,10 @@ export type SSEProgressEvent = {
 
 export type SSEResultEvent = {
   type: 'result';
-  node: string;
+  node?: string;
   message: string;
   answer?: string;
+  data?: any;
 };
 
 export type SSEDoneEvent = {
@@ -123,6 +124,7 @@ export const chatService = {
     payload: ChatMessageCreate,
     onEvent: (event: SSEEvent) => void,
     onError?: (err: Error) => void,
+    onFinish?: () => void,
   ): AbortController {
     const controller = new AbortController();
 
@@ -179,6 +181,7 @@ export const chatService = {
             }
           }
         }
+        onFinish?.();
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
           onError?.(err as Error);
@@ -246,6 +249,7 @@ export const formService = {
     payload: DynamicFormSubmitRequest,
     onEvent: (event: SSEEvent) => void,
     onError?: (err: Error) => void,
+    onFinish?: () => void,
   ): AbortController {
     const controller = new AbortController();
     const url = '/api/message/forms/submit';
@@ -293,6 +297,7 @@ export const formService = {
             }
           }
         }
+        onFinish?.();
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
           onError?.(err as Error);
