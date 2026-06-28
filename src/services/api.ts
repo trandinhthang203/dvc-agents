@@ -53,6 +53,32 @@ export const authService = {
   },
 };
 
+export interface UserProfile {
+  id?: number;
+  fullname: string;
+  citizenid: string;
+  phonenumber: string;
+  dateofbirth: string;
+  gender: string;
+  address: string;
+  province: string;
+  district: string;
+  ward: string;
+  avatarurl?: string;
+  [key: string]: any;
+}
+
+export const userService = {
+  getCurrentUser: async (): Promise<UserProfile> => {
+    const response = await api.get('user/me');
+    return response.data;
+  },
+  updateProfile: async (userData: Partial<UserProfile>): Promise<UserProfile> => {
+    const response = await api.put('user/me', userData);
+    return response.data;
+  }
+};
+
 // ─── Chat types ───────────────────────────────────────────────────────────────
 export interface ChatMessageCreate {
   idchatsession: string;

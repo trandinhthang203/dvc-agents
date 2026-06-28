@@ -335,24 +335,7 @@ export function Register() {
             </div>
           </div>
 
-          {/* Avatar URL (Optional but shown in API) */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-on-surface-variant ml-1" htmlFor="reg-avatar">Link ảnh đại diện (Tùy chọn)</label>
-            <div className="relative group">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">
-                <ImageIcon size={18} />
-              </div>
-              <input
-                id="reg-avatar"
-                type="url"
-                placeholder="https://example.com/avatar.jpg"
-                value={formData.avatarurl}
-                onChange={handleChange}
-                className="w-full pl-11 pr-4 py-2.5 bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all font-sans outline-none text-sm disabled:opacity-50"
-                disabled={isLoading}
-              />
-            </div>
-          </div>
+
 
           <div className="space-y-2">
             <div className="space-y-1">

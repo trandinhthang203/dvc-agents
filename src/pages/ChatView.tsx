@@ -10,6 +10,7 @@ import { Suggestions } from '../components/Suggestions';
 import { ChatInput } from '../components/ChatInput';
 import { VerticalAgentStepper, AgentStep } from '../components/VerticalAgentStepper';
 import { DynamicForm, DynamicFormPayload } from '../components/DynamicForm';
+import { MapPanel, MapPayload } from '../components/MapPanel';
 import { User, Sparkles, AlertTriangle } from 'lucide-react';
 import { ChatMessageCreate, chatService, SSEEvent, SSEDynamicFormEvent, sessionService, ChatSession, formService, DynamicFormSubmitRequest } from '../services/api';
 import ReactMarkdown from 'react-markdown';
@@ -32,6 +33,8 @@ interface ChatMessage {
     formSubmitting?: boolean;
     /** True once the form has been accepted by the backend */
     formSubmitted?: boolean;
+    /** Set when the location node returns origin + destination for map rendering */
+    mapPayload?: MapPayload;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -266,6 +269,17 @@ export const ChatView: React.FC = () => {
                                     ? { ...s, status: 'completed' as const, content: event.message }
                                     : s
                             );
+
+                            // ── Location node → extract map payload ───────────
+                            if (event.node === 'location' && event.data?.location) {
+                                const loc = event.data.location;
+                                const mapPayload: MapPayload = {
+                                    origin: loc.origin ?? loc.start_address ?? '',
+                                    destination: loc.destination ?? loc.end_address ?? '',
+                                };
+                                return { ...msg, steps: updatedSteps, mapPayload };
+                            }
+
                             return { ...msg, steps: updatedSteps };
                         }
 
@@ -589,6 +603,13 @@ export const ChatView: React.FC = () => {
                                             {msg.steps && msg.steps.length > 0 && (
                                                 <div className="mb-6 max-w-3xl">
                                                     <VerticalAgentStepper steps={msg.steps} onLinkClick={handleLinkClick} />
+                                                </div>
+                                            )}
+
+                                            {/* Inline map – rendered after location node completes */}
+                                            {msg.mapPayload && !msg.streaming && (
+                                                <div className="mb-4 max-w-3xl">
+                                                    <MapPanel payload={msg.mapPayload} />
                                                 </div>
                                             )}
 

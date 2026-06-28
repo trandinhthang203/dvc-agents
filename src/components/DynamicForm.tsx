@@ -41,12 +41,11 @@ interface DynamicFormProps {
 // ─── Helper ────────────────────────────────────────────────────────────────────
 
 function parseSelectOptions(type: string): string[] {
-    // type looks like "select:Option A,Option B,Option C"
     const raw = type.slice('select:'.length);
     return raw.split(',').map((o) => o.trim()).filter(Boolean);
 }
 
-// ─── Component ─────────────────────────────────────────────────────────────────
+// ─── Main Component ────────────────────────────────────────────────────────────
 
 export const DynamicForm: React.FC<DynamicFormProps> = ({
     payload,
@@ -54,7 +53,6 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
     submitting = false,
     submitted = false,
 }) => {
-    // Initialise values: boolean fields → false, others → ''
     const initialValues = () =>
         Object.fromEntries(
             payload.fields.map((f) => [
@@ -66,32 +64,28 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
     const [values, setValues] = useState<Record<string, string | boolean>>(initialValues);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    // ── Validation ─────────────────────────────────────────────────────────────
+    // ── Validation ──────────────────────────────────────────────────────────────
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
-
         for (const field of payload.fields) {
             const val = values[field.field_id];
-
             if (field.required && field.type !== 'boolean') {
                 if (typeof val === 'string' && val.trim() === '') {
                     newErrors[field.field_id] = `${field.label} không được để trống.`;
                     continue;
                 }
             }
-
             if (field.type === 'number' && typeof val === 'string' && val.trim() !== '') {
                 if (isNaN(Number(val))) {
                     newErrors[field.field_id] = `${field.label} phải là số.`;
                 }
             }
         }
-
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
-    // ── Handlers ───────────────────────────────────────────────────────────────
+    // ── Handlers ────────────────────────────────────────────────────────────────
     const handleChange = (fieldId: string, value: string | boolean) => {
         setValues((prev) => ({ ...prev, [fieldId]: value }));
         if (errors[fieldId]) {
@@ -109,22 +103,19 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
         onSubmit(payload.request_id, values);
     };
 
-    // ── Render helpers ──────────────────────────────────────────────────────────
+    const baseInput =
+        'w-full bg-white/80 rounded-lg border border-outline-variant/40 ' +
+        'px-3 py-2 text-sm text-on-surface placeholder:text-secondary/40 ' +
+        'focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 ' +
+        'transition-all duration-150 shadow-sm ';
+
     const renderField = (field: DynamicFormField) => {
         const hasError = Boolean(errors[field.field_id]);
-        const baseInput =
-            'w-full bg-surface-container rounded-xl border border-outline-variant/30 ' +
-            'px-4 py-2.5 text-sm text-on-surface placeholder:text-secondary/50 ' +
-            'focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 ' +
-            'transition-all duration-150 ' +
-            (hasError ? 'border-red-500/60 focus:ring-red-500/30 ' : '');
+        const inputClass = baseInput + (hasError ? 'border-red-500/60 focus:ring-red-500/30 ' : '');
 
         if (field.type === 'boolean') {
             return (
-                <label
-                    key={field.field_id}
-                    className="flex items-center gap-3 cursor-pointer group"
-                >
+                <label key={field.field_id} className="flex items-center gap-3 cursor-pointer group">
                     <div className="relative">
                         <input
                             id={`field-${field.field_id}`}
@@ -135,15 +126,15 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                             className="sr-only peer"
                         />
                         <div
-                            className={`w-10 h-6 rounded-full border-2 transition-all duration-200 flex items-center
+                            className={`w-9 h-5 rounded-full border-2 transition-all duration-200 flex items-center
                                 ${values[field.field_id]
                                     ? 'bg-primary border-primary'
                                     : 'bg-surface-container border-outline-variant/40 group-hover:border-primary/50'
                                 }`}
                         >
                             <div
-                                className={`w-4 h-4 rounded-full bg-white shadow transition-transform duration-200
-                                    ${values[field.field_id] ? 'translate-x-5' : 'translate-x-1'}`}
+                                className={`w-3.5 h-3.5 rounded-full bg-white shadow transition-transform duration-200
+                                    ${values[field.field_id] ? 'translate-x-4' : 'translate-x-0.5'}`}
                             />
                         </div>
                     </div>
@@ -161,7 +152,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                     placeholder={field.placeholder}
                     disabled={submitted || submitting}
                     rows={3}
-                    className={`${baseInput} resize-none`}
+                    className={`${inputClass} resize-none`}
                 />
             );
         }
@@ -174,7 +165,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                     value={values[field.field_id] as string}
                     onChange={(e) => handleChange(field.field_id, e.target.value)}
                     disabled={submitted || submitting}
-                    className={`${baseInput} appearance-none cursor-pointer`}
+                    className={`${inputClass} appearance-none cursor-pointer`}
                 >
                     <option value="">— Chọn {field.label} —</option>
                     {options.map((opt) => (
@@ -184,7 +175,6 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
             );
         }
 
-        // Default: string | number
         return (
             <input
                 id={`field-${field.field_id}`}
@@ -193,15 +183,13 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                 onChange={(e) => handleChange(field.field_id, e.target.value)}
                 placeholder={field.placeholder}
                 disabled={submitted || submitting}
-                className={baseInput}
+                className={inputClass}
             />
         );
     };
 
-    // ── Main render ─────────────────────────────────────────────────────────────
     return (
         <div className="dynamic-form-card">
-            {/* Header */}
             <div className="dynamic-form-header">
                 <div className="dynamic-form-header-accent" />
                 <div className="dynamic-form-header-content">
@@ -212,36 +200,29 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                 </div>
             </div>
 
-            {/* Submitted state */}
-            {submitted ? (
-                <div className="dynamic-form-submitted">
-                    <CheckCircle2 size={32} className="text-emerald-500 shrink-0" />
-                    <div>
-                        <p className="font-semibold text-sm text-on-surface">Đã gửi thành công!</p>
-                        <p className="text-xs text-secondary mt-0.5">
-                            Thông tin của bạn đang được xử lý...
-                        </p>
+            <div className="dynamic-form-body">
+                {submitted ? (
+                    <div className="dynamic-form-submitted">
+                        <CheckCircle2 size={28} className="text-emerald-500 shrink-0" />
+                        <div>
+                            <p className="font-semibold text-sm text-on-surface">Đã gửi thành công!</p>
+                            <p className="text-xs text-secondary mt-0.5">Thông tin của bạn đang được xử lý...</p>
+                        </div>
                     </div>
-                </div>
-            ) : (
-                <form onSubmit={handleSubmit} noValidate className="dynamic-form-body">
-                    <div className="dynamic-form-fields">
+                ) : (
+                    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3">
                         {payload.fields.map((field) => (
-                            <div key={field.field_id} className="dynamic-form-field-group">
+                            <div key={field.field_id} className="flex flex-col gap-1">
                                 {field.type !== 'boolean' && (
                                     <label
                                         htmlFor={`field-${field.field_id}`}
-                                        className="dynamic-form-label"
+                                        className="text-xs font-semibold text-on-surface-variant tracking-wide"
                                     >
                                         {field.label}
-                                        {field.required && (
-                                            <span className="text-red-400 ml-0.5">*</span>
-                                        )}
+                                        {field.required && <span className="text-red-400 ml-0.5">*</span>}
                                     </label>
                                 )}
-
                                 {renderField(field)}
-
                                 {errors[field.field_id] && (
                                     <p className="dynamic-form-error">
                                         <AlertTriangle size={11} />
@@ -250,27 +231,27 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                                 )}
                             </div>
                         ))}
-                    </div>
 
-                    <button
-                        type="submit"
-                        disabled={submitting}
-                        className="dynamic-form-submit"
-                    >
-                        {submitting ? (
-                            <>
-                                <Loader2 size={16} className="animate-spin" />
-                                Đang xử lý...
-                            </>
-                        ) : (
-                            <>
-                                <Send size={15} />
-                                {payload.submit_label ?? 'Gửi'}
-                            </>
-                        )}
-                    </button>
-                </form>
-            )}
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="dynamic-form-submit mt-2"
+                        >
+                            {submitting ? (
+                                <>
+                                    <Loader2 size={15} className="animate-spin" />
+                                    Đang xử lý...
+                                </>
+                            ) : (
+                                <>
+                                    <Send size={14} />
+                                    {payload.submit_label ?? 'Gửi'}
+                                </>
+                            )}
+                        </button>
+                    </form>
+                )}
+            </div>
         </div>
     );
 };

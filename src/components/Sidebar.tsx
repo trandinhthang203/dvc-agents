@@ -9,7 +9,8 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { sessionService, ChatSession } from '../services/api';
+import { Link } from 'react-router-dom';
+import { sessionService, ChatSession, userService, UserProfile } from '../services/api';
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -28,6 +29,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNewSession,
   onDeleteSession
 }) => {
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const user = await userService.getCurrentUser();
+        setUserProfile(user);
+      } catch (err) {
+        console.error("Failed to load user profile in sidebar", err);
+      }
+    };
+    fetchUser();
+  }, []);
+
   const formatSessionTime = (dateStr?: string) => {
     if (!dateStr) return 'Vừa xong';
     try {
@@ -144,24 +159,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="p-4 space-y-4">
-        <a href="#" className="flex items-center gap-3 px-3 py-2 text-secondary hover:text-primary hover:bg-surface-container-high rounded-lg transition-all">
+        <Link to="/profile" className="flex items-center gap-3 px-3 py-2 text-secondary hover:text-primary hover:bg-surface-container-high rounded-lg transition-all">
           <Settings size={18} />
           <span className="text-sm font-medium">Cài đặt tài khoản</span>
-        </a>
+        </Link>
 
-        <div className="p-3 bg-surface-container-highest/30 rounded-2xl flex items-center gap-3 border border-outline-variant/10">
-          <div className="w-9 h-9 rounded-full bg-white overflow-hidden border border-outline-variant/10">
-            <img
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100"
-              alt="Admin"
-              className="w-full h-full object-cover"
-            />
+        <Link to="/profile" className="p-3 bg-surface-container-highest/30 rounded-2xl flex items-center gap-3 border border-outline-variant/10 hover:border-primary/30 transition-all group">
+          <div className="w-9 h-9 rounded-full bg-white overflow-hidden border border-outline-variant/10 shrink-0">
+            {userProfile?.avatarurl ? (
+              <img
+                src={userProfile.avatarurl}
+                alt={userProfile.fullname || "User"}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-surface-container-high flex items-center justify-center text-primary font-bold">
+                {(userProfile?.fullname || "U").charAt(0).toUpperCase()}
+              </div>
+            )}
           </div>
           <div className="overflow-hidden">
-            <p className="font-bold text-xs truncate">Admin Nguyễn Văn A</p>
+            <p className="font-bold text-xs truncate group-hover:text-primary transition-colors">{userProfile?.fullname || 'Đang tải...'}</p>
             <p className="text-[10px] text-secondary font-medium tracking-wide">Hệ thống Điều phối</p>
           </div>
-        </div>
+        </Link>
       </div>
     </aside>
   );

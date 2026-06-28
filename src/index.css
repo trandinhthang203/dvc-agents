@@ -178,3 +178,112 @@
   padding: 1.25rem;
   background: color-mix(in srgb, #10b981 8%, transparent);
 }
+
+/* ─── DynamicForm: PDF + Form split layout ─────────────────────────────────── */
+
+.dynamic-form-with-pdf {
+  /* Override card to allow the split body to fill width properly */
+  max-width: 100%;
+}
+
+.dynamic-form-split-body {
+  display: flex;
+  flex-direction: row;
+  min-height: 480px;
+  max-height: 620px;
+  overflow: hidden;
+}
+
+/* PDF preview panel */
+.dynamic-form-pdf-panel {
+  flex: 1 1 55%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid color-mix(in srgb, var(--color-outline-variant) 25%, transparent);
+  background: #f0f0f0;
+  transition: flex 0.25s ease;
+  position: relative;
+}
+
+.dynamic-form-pdf-expanded {
+  flex: 1 1 75%;
+}
+
+.dynamic-form-pdf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-surface-container-low);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-outline-variant) 20%, transparent);
+  flex-shrink: 0;
+}
+
+.pdf-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--color-outline-variant) 30%, transparent);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pdf-toolbar-btn:hover {
+  background: var(--color-surface-container-high);
+  color: var(--color-primary);
+}
+
+.dynamic-form-pdf-iframe-wrap {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.dynamic-form-pdf-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+/* Form fields panel (right side) */
+.dynamic-form-fields-panel {
+  flex: 1 1 45%;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-surface-container-lowest);
+}
+
+.dynamic-form-fields-panel-inner {
+  flex: 1;
+  padding: 1rem 1.125rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Responsive: stack vertically on small screens */
+@media (max-width: 700px) {
+  .dynamic-form-split-body {
+    flex-direction: column;
+    max-height: none;
+  }
+
+  .dynamic-form-pdf-panel {
+    flex: 0 0 260px;
+    border-right: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-outline-variant) 25%, transparent);
+  }
+
+  .dynamic-form-fields-panel {
+    flex: 0 0 auto;
+  }
+}
